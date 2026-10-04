@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WAMS
 
-## Getting Started
+WhatsApp reminders for one company. Staff add customers, sync approved Meta templates, and schedule a recurring message for a single customer. Inbound STOP opts that customer out.
 
-First, run the development server:
+This version uses the official WhatsApp Cloud API. It does not send free-form marketing text on a timer, and it does not message someone who has not opted in.
+
+## What you can do
+
+- Create one company workspace per account
+- Connect a WhatsApp Business phone number with a permanent token
+- Add customers, or import them from CSV
+- Record service and marketing opt-in separately
+- Sync templates from Meta
+- Schedule a daily, weekly, monthly, or every-N-days reminder for one customer
+- Send due reminders from the dashboard, or from a cron job
+- Keep a send log with delivery updates
+- Honor STOP, and the WhatsApp marketing-message preference
+
+## Setup
+
+1. Create a Supabase project.
+2. Open the SQL editor and run `supabase/migrations/20261003180000_init.sql`.
+3. In Authentication, turn off email confirmation for a local trial.
+4. Copy `.env.example` to `.env.local` and fill in the Supabase URL, anon key, and service role key.
+5. Set `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `META_APP_SECRET`, and `CRON_SECRET` to long random strings.
+6. `npm install`
+7. `npm run dev`
+
+Sign up at `/signup`. That creates the company through a database trigger.
+
+## WhatsApp
+
+In a Meta app with the WhatsApp product:
+
+- Copy the WhatsApp Business Account ID and Phone number ID into Settings.
+- Create a system user token with `whatsapp_business_messaging` and `whatsapp_business_management`.
+- Create message templates in WhatsApp Manager and wait until they are approved.
+- Set the webhook callback to `https://your-domain/api/webhooks/whatsapp`.
+- Use the verify token from `.env.local`.
+- Subscribe to the `messages` field.
+
+Utility templates require the service opt-in flag. Marketing templates require the marketing opt-in flag. Templates with a media header or a dynamic button URL are synced, then marked as not usable.
+
+A new phone number has a low daily cap. Rate-limit errors are retried 15 minutes later. Missed months are not backfilled.
+
+## Sending on a schedule
+
+The dashboard button **Send due reminders** sends whatever is due for the signed-in company.
+
+For automatic sending, call this every minute:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/dispatch
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`vercel.json` registers that path as a Vercel Cron. Hobby plans may not allow a per-minute schedule; use an external scheduler if so.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## CSV
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Headers: `first_name`, `last_name`, `phone`, `email`, `tags`, `service_opt_in`, `marketing_opt_in`, `notes`.
 
-## Learn More
+Separate tags with `|`. A sample file is at `/sample-customers.csv`. Numbers without `+` use the calling code on the import form. Re-importing a customer who sent STOP does not opt them back in.
 
-To learn more about Next.js, take a look at the following resources:
+## Tests
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm test
+```
